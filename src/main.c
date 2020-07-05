@@ -26,7 +26,7 @@ int *num_mem;
 int *num_stat;
 int num_count;
 
-/* definicao das travas de acesso ao espaco de memoria em que os numeros sao armazenados, seu estado e se eh primo ou nao */
+/* definicao das travas do espaco de memoria em que os numeros sao armazenados e seu estado */
 pthread_mutex_t num_lock;
 pthread_mutex_t stat_lock;
 
@@ -49,30 +49,30 @@ int prime_check(unsigned long long num){
 /* funcao da atividade da thread */
 void* threadwork(void* arg){
   int* id_ptr = (int*)(arg);
-  int thread_id = (*id_ptr);
-  int num_index = 0;
-  unsigned long long num_test = 0;
-  while (1){
-    pthread_mutex_lock(&stat_lock);
-    while ((num_stat[num_index] != 0) && (num_index < num_count)){
+  int thread_id = (*id_ptr); /* o argumento recebido na funcao eh o identificador da thread, so utilizado para debugg */
+  int num_index = 0; /* variavel para representar o indice dos numeros na memoria */
+  unsigned long long num_test = 0; /* definicao da variavel do numero a ser testado */
+  while (1){ /* vai ficar em loop ate terminar de varrer a lista de estados do threadpool */
+    pthread_mutex_lock(&stat_lock); /* pede a trava para leitura dos estados */
+    while ((num_stat[num_index] != 0) && (num_index < num_count)){ /* enquanto n estiver terminado de varrer a lista, vai procurar um numero que ainda nao foi checado */
       ++num_index;
     }
-    if (num_index >= num_count){
-      pthread_mutex_unlock(&stat_lock);
+    if (num_index >= num_count){ /* se ele terminou a checagem, ja pode terminar a execucao da thread */
+      pthread_mutex_unlock(&stat_lock); /* libera a trava de estados */
       break;
     }
-    num_stat[num_index] = 1;
-    pthread_mutex_unlock(&stat_lock);
-    num_test = num_mem[num_index];
-    int prime = prime_check(num_test);
-    pthread_mutex_lock(&num_lock);
-    num_mem[num_index] = prime;
-    pthread_mutex_unlock(&num_lock);
-    pthread_mutex_lock(&stat_lock);
-    num_stat[num_index] = 2;
-    pthread_mutex_unlock(&stat_lock);
+    num_stat[num_index] = 1; /* atualiza o estado do indice correspondente para 'em trabalho' */
+    pthread_mutex_unlock(&stat_lock); /* libera a trava de estados */
+    num_test = num_mem[num_index]; /* o numero a ser testado eh o relacionado ao indice que esta em trabalho */
+    int prime = prime_check(num_test); /* chama a funcao de teste de primo */
+    pthread_mutex_lock(&num_lock); /* pede a trava do numero */
+    num_mem[num_index] = prime; /* substitui o numero q foi testado pelo resultado da funcao de primo */
+    pthread_mutex_unlock(&num_lock); /* libera a trava do numero */
+    pthread_mutex_lock(&stat_lock); /* pede a trava de estado */
+    num_stat[num_index] = 2; /* atualiza o estado do indice do threadpool para 'finalizado' */
+    pthread_mutex_unlock(&stat_lock); /* libera a trava de estado */
   }
-  return NULL;
+  return NULL; /* finaliza a thread */
 }
 
 /* funcao principal do codigo */
@@ -90,10 +90,10 @@ int main(){
   fgets(num_str, tam_buffer, stdin);
   char* num_ptr = strtok(num_str, " ");
   while (num_ptr != NULL){
-    num_mem = realloc(num_mem, (num_count + 1)*sizeof(unsigned long long));
-    num_stat = realloc(num_stat, (num_count + 1)*sizeof(unsigned int));
+    num_mem = realloc(num_mem, (num_count + 1)*sizeof(unsigned long long)); /* aumenta o espaco de memoria para caber mais um numero */
+    num_stat = realloc(num_stat, (num_count + 1)*sizeof(unsigned int)); /* e tambem mais um estado */
     num_mem[num_count] = atoll(num_ptr);
-    num_stat[num_count] = NOT_ASSIGNED;
+    num_stat[num_count] = NOT_ASSIGNED; /* atualiza o estado correspondente para 'nao testado' */
     num_ptr = strtok(NULL, " ");
     num_count++;
   }
@@ -113,13 +113,18 @@ int main(){
     pthread_join(threads[i], NULL);
   }
 
-  /* terminados os threads em execucao, nos exibimos o resultado final*/
-  /* printf("%d\n", ); */
-  printf("Aqui estao os numeros da strings e o seus respectivos status:\n");
-  for (int i = 0; i < num_count; i++){
-    printf("numero %d: %d, status: %d\n", i, num_mem[i], num_stat[i]);
+  /* terminados os threads em execucao, nos calculamos quantos primos temos*/
+  int prime_count = 0;
+  for (int i = 0; i < num_count; i++){ /* varre a lista de numeros, que agora sao o resultado da operacao de checagem de primo */
+    if (num_mem[i] == PRIME){ /* se na lista ele encontrar o valor correspondente o primo, incrementa o o contador */
+      ++prime_count;
+    }
   }
-  printf("agora vou liberar o espaco de memoria alocado\n");
+
+  /* exibe o resultado final */
+  printf("%d\n", prime_count);
+
+  /* libera o espaco de memoria utilizado */
   free(num_mem);
   free(num_stat);
   return 0;
