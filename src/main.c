@@ -21,6 +21,11 @@
 /* define o tamanho do buffer de entrada */
 const int tam_buffer = 100;
 
+/* variaveis globais de ponteiros do heap e contagem de numero */
+int *num_mem;
+int *num_stat;
+int num_count;
+
 /* definicao das travas de acesso ao espaco de memoria em que os numeros sao armazenados, seu estado e se eh primo ou nao */
 pthread_mutex_t num_lock;
 pthread_mutex_t stat_lock;
@@ -43,8 +48,8 @@ int prime_check(unsigned long long num){
 
 /* funcao da atividade da thread */
 void* threadwork(void* arg){
-  int* num_count_ptr = (int*)(arg);
-  int num_count = (*num_count_ptr);
+  int* id_ptr = (int*)(arg);
+  int thread_id = (*id_ptr);
   int num_index = 0;
   unsigned long long num_test = 0;
   while (1){
@@ -63,20 +68,21 @@ void* threadwork(void* arg){
     pthread_mutex_lock(&num_lock);
     num_mem[num_index] = prime;
     pthread_mutex_unlock(&num_lock);
+    pthread_mutex_lock(&stat_lock);
+    num_stat[num_index] = 2;
+    pthread_mutex_unlock(&stat_lock);
   }
   return NULL;
 }
 
 /* funcao principal do codigo */
 int main(){
-  int num_count = 0; /* variavel para contar o numero de numeros a serem checados */
+  num_count = 0; /* variavel para contar o numero de numeros a serem checados */
 
   /* aloca um espaco de memoria para guardar os numeros */
-  int *num_mem;
   num_mem = (int*) malloc(sizeof(unsigned long long));
 
   /* aloca um espaco de memoria para guardar uma lista do status dos numeros */
-  int *num_stat;
   num_stat = (int*) malloc(sizeof(unsigned int));
 
   /* instrucoes para receber uma string de entrada dividir nos espacos, e armazenar na memoria */
@@ -94,10 +100,12 @@ int main(){
 
   /* definicao das threads */
   pthread_t threads[N_MAX_THREADS];
+  int thread_id[N_MAX_THREADS];
 
   /* disparando threads */
   for (int i = 0; i < N_MAX_THREADS; i++) {
-    pthread_create(&(threads[i]), NULL, threadwork, (void*) (&num_count));
+    thread_id[i] = i;
+    pthread_create(&(threads[i]), NULL, threadwork, (void*) (&thread_id[i]));
   }
 
   /* esperando as threads terminarem as checadas */
@@ -111,5 +119,8 @@ int main(){
   for (int i = 0; i < num_count; i++){
     printf("numero %d: %d, status: %d\n", i, num_mem[i], num_stat[i]);
   }
+  printf("agora vou liberar o espaco de memoria alocado\n");
+  free(num_mem);
+  free(num_stat);
   return 0;
 }
